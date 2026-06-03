@@ -1,0 +1,81 @@
+#!/bin/bash
+set -e -a
+
+#... load the necessary modules here ...
+module reset
+module load PrgEnv-amd
+module load craype-accel-amd-gfx90a
+module load cray-mpich
+module load rocm
+module load cmake
+module unload cray-libsci darshan-runtime
+module load cray-python
+
+module list
+#...
+
+#... set some environment variables
+: ${ENABLE_SMARTREDIS:="ON"}
+export CC=cc
+export CXX=CC
+export FC=ftn
+#...
+
+#.. ===
+path_to_code=`pwd`
+build_date=$(date '+%Y-%m-%d')
+which_build=RBK_built.on.${build_date}
+BUILD_DIR=${path_to_code}/${which_build}
+
+#.. NOTE: change the location of NEKRS_HOME to a directory that you have access to.
+#.. ^^^^
+export NEKRS_SOURCE_DIR=${PWD}                       #.. this is where we are
+echo ${NEKRS_SOURCE_DIR}
+export NEKRS_BRANCH_DIR=${NEKRS_SOURCE_DIR%/*}       #.. this is where we were, one step above
+echo ${NEKRS_BRANCH_DIR}
+export NEKRS_HOME=${NEKRS_BRANCH_DIR}/.local/nekrs   #.. we install stuff in the .local directory, one step above
+                                                     #.. from where we are now, i.e., one step above ${NEKRS_SOURCE_DIR}
+                                                     #.. that is, .local is located in ${NEKRS_BRANCH_DIR}
+echo ${NEKRS_HOME}
+#...
+
+#... set the build and install directories
+CWD=$PWD
+echo -e "\033[35mInstalling nekRS at $NEKRS_HOME\033[m"
+export INSTALL_DIR=$NEKRS_HOME
+#...
+
+#... build SmartRedis if enabled
+if [ ${ENABLE_SMARTREDIS} == "ON" ]; then
+  if [ -f "$NEKRS_HOME/SmartRedis/install/lib64/libsmartredis.so" ]; then
+    echo -e "\033[35mFound SmartRedis at $NEKRS_HOME/SmartRedis/install/lib64/libsmartredis.so\033[m"
+  else
+    echo -e "\033[35mBuilding SmartRedis first ...\033[m"
+    if [ ! -d "$NEKRS_HOME" ]; then
+      mkdir -p $NEKRS_HOME
+    fi
+    cd $NEKRS_HOME
+    git clone https://github.com/rickybalin/SmartRedis.git
+    cd SmartRedis
+    #pip install -e .
+    NPROC=10 make lib
+    cd $CWD
+    echo -e "\033[35mDone building SmartRedis\033[m"
+    echo
+  fi
+fi
+#...
+
+#... build nekRS
+echo ""
+if [ ${ENABLE_SMARTREDIS} == "ON" ]; then
+  echo -e "\033[35mBuilding nekRS WITH SmartRedis ...\033[m"
+  ./build.sh -DENABLE_SMARTREDIS=ON -DSMARTREDIS_INSTALL_DIR=$NEKRS_HOME/SmartRedis/install
+elif [ -n ${ADIOS2_INSTALL_DIR} ]; then
+  echo -e "\033[35mBuilding nekRS with ADIOS2 from ${ADIOS2_INSTALL_DIR} ...\033[m"
+  ./build.sh -DADIOS2_INSTALL_DIR=$ADIOS2_INSTALL_DIR
+else
+  echo -e "\033[35mBuilding nekRS WITHOUT external dependencies ...\033[m"
+  ./build.sh
+fi
+#...
