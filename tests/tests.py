@@ -14,7 +14,7 @@ TGV_TRANSFORM_OPTS = [
 @rfm.simple_test
 class TGVOffline(NekRSMLOfflineTest):
     num_nodes = parameter([1])
-    ranks_per_node = parameter([2])
+    ranks_per_node = parameter([1, 2, 4])
 
     def __init__(self):
         super().__init__(
@@ -108,7 +108,7 @@ class TurbChannelOffline(NekRSMLOfflineTest):
 @rfm.simple_test
 class TGVOnline(NekRSMLOnlineTest):
     num_nodes = parameter([1])
-    ranks_per_node = parameter([4])
+    ranks_per_node = parameter([2, 4])
 
     def __init__(self):
         super().__init__(
@@ -127,7 +127,7 @@ class TGVOnline(NekRSMLOnlineTest):
 @rfm.simple_test
 class TGVOnlineTraj(NekRSMLOnlineTest):
     num_nodes = parameter([1])
-    ranks_per_node = parameter([8])
+    ranks_per_node = parameter([4])
 
     def __init__(self):
         super().__init__(
@@ -146,7 +146,7 @@ class TGVOnlineTraj(NekRSMLOnlineTest):
 @rfm.simple_test
 class TGVOnlineTrajAdios(NekRSMLOnlineTest):
     num_nodes = parameter([1])
-    ranks_per_node = parameter([8])
+    ranks_per_node = parameter([4])
 
     def __init__(self):
         super().__init__(
