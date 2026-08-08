@@ -265,9 +265,11 @@ def write_ensemble_configs(
         cpus.pop(52)
         cpus.pop(0)
         gpus = list(range(12))
+        gpu_selector = "ZE_AFFINITY_MASK"
     elif system_name == "polaris":
         cpus = list(range(32))
         gpus = list(range(4))
+        gpu_selector = "CUDA_VISIBLE_DEVICES"
     else:
         raise ValueError(f"Unsupported system: {system_name}")
 
@@ -280,12 +282,15 @@ def write_ensemble_configs(
     )
 
     # Launcher config
+    n_leaf_nodes = len(get_nodes()) // nodes_per_member
+    nlevels = 1 if n_leaf_nodes <= 64 else 2
     launcher_config = LauncherConfig(
         child_executor_name="async_mpi",
         task_executor_name="async_mpi",
         return_stdout=True,
+        gpu_selector=gpu_selector,
         children_scheduler_policy="fixed_leafs_children_policy",
-        policy_config=PolicyConfig(nlevels=2, leaf_nodes=len(get_nodes()) // nodes_per_member),
+        policy_config=PolicyConfig(nlevels=nlevels, leaf_nodes=n_leaf_nodes),
     )
 
     # Write configs

@@ -82,7 +82,7 @@ class SmartRedisBuild(CompileOnlyTest):
 
     @run_before("compile")
     def configure_buld(self):
-        self.sourcesdir = "https://github.com/rickybalin/SmartRedis.git"
+        self.sourcesdir = "https://github.com/CrayLabs/SmartRedis.git"
         self.build_system = "Make"
         self.build_system.cc = self.current_environ.cc
         self.build_system.cxx = self.current_environ.cxx
@@ -180,7 +180,7 @@ class NekRSMLTest(RunOnlyTest):
         self.ml_args = init_missing_args(args)
 
         # Initialize reframe fields.
-        self.descr = f"NekRS-ML {self.ml_args['test_type']} test"
+        self.descr = f"NekRS-ML {self.test_type} test"
         self.maintainers = ["tratnayaka@anl.gov", "kris.rowe@anl.gov"]
         self.tags = {"all", self.model, self.case, self.time_dependency}
         self.readonly_files = [f"{self.case}.re2"]
@@ -192,6 +192,10 @@ class NekRSMLTest(RunOnlyTest):
     @property
     def case_dir(self):
         return self.ml_args["directory"]
+
+    @property
+    def test_type(self):
+        return self.ml_args["test_type"]
 
     @property
     def time_dependency(self):
@@ -344,8 +348,24 @@ class NekRSMLTest(RunOnlyTest):
             f"--cpu-bind=list:{cpu_bind_list}",
         ]
 
+    def validate_deployment(self):
+        # For a colocated deployment the simulation and the ML trainer share the
+        # same node, so the node's ranks are split between them (ml_rpn = rpn//2).
+        # With rpn=1 this leaves zero ranks for the trainer (mlprocs=0), which
+        # launches the train step with an empty 'mpiexec --np --ppn ...' and
+        # fails. Fail fast here with a clear message instead.
+        if self.deployment == "colocated":
+            if self.ml_rpn < 1 or self.sim_rpn < 1:
+                raise ValueError(
+                    f"Colocated deployment requires at least 2 ranks per node "
+                    f"(got rpn={self.rpn}): the simulation and the ML trainer "
+                    f"share a node, giving sim_rpn={self.sim_rpn} and "
+                    f"ml_rpn={self.ml_rpn}. Both must be >= 1."
+                )
+
     @run_before("run")
     def setup_run(self):
+        self.validate_deployment()
         self.set_environment()
         self.set_launcher_options()
 
@@ -488,13 +508,13 @@ class NekRSMLOfflineTest(NekRSMLTest):
             self.nekrs_cmd(),
         ]
 
-        if self.ml_args["model"] == "dist-gnn":
+        if self.model == "dist-gnn":
             self.prerun_cmds += [
                 self.check_halo_info_cmd(),
                 self.check_input_files_cmd(),
                 *self.check_traj_cmd(),
             ]
-        elif self.ml_args["model"] == "sr-gnn":
+        elif self.model == "sr-gnn":
             self.prerun_cmds += [
                 self.set_sr_gnn_target_and_input_list(),
                 self.generate_sr_gnn_data_cmd(),
@@ -516,6 +536,7 @@ class NekRSMLOfflineTest(NekRSMLTest):
                 f"target_loss={args['target_loss']}",
                 f"time_dependency={args['time_dependency']}",
             ]
+            self.executable_opts += list(args.get("extra_opts", []))
         elif args["model"] == "sr-gnn":
             self.executable_opts = [
                 f"epochs={args['epochs']}",
@@ -526,7 +547,7 @@ class NekRSMLOfflineTest(NekRSMLTest):
             ]
 
     def set_postrun_cmds(self):
-        if self.ml_args["model"] != "sr-gnn":
+        if self.model != "sr-gnn":
             return
 
         self.postrun_cmds += [
@@ -560,7 +581,7 @@ class NekRSMLOfflineTest(NekRSMLTest):
 
         pattern = (
             r"Total training time: \S+ seconds"
-            if self.ml_args["model"] == "sr-gnn"
+            if self.model == "sr-gnn"
             else r"SUCCESS! GNN training validated!"
         )
         gnn_ok = sn.assert_found(
@@ -575,7 +596,7 @@ class NekRSMLOfflineTest(NekRSMLTest):
                 self.stdout,
                 msg="GNN validation failed (inference).",
             )
-            if self.ml_args["model"] == "sr-gnn"
+            if self.model == "sr-gnn"
             else True
         )
 
@@ -688,6 +709,9 @@ class NekRSMLOnlineTest(NekRSMLTest):
                 f"consistency=True target_loss={self.target_loss} "
                 f"device_skip={self.sim_rpn} time_dependency={self.time_dependency} "
             )
+            extra_opts = self.ml_args.get("extra_opts", [])
+            if extra_opts:
+                arg_str += " ".join(extra_opts) + " "
             if self.client == "smartredis":
                 arg_str += f'client.db_nodes={self.db_nn}" '
             elif self.client == "adios":
